@@ -12,7 +12,6 @@ provider:
   timeout: 900
 
 custom:
-  defaultStage: dev
   basePath: ramen
 
 functions:
