@@ -1,0 +1,85 @@
+service: async-api
+
+plugins:
+  - serverless-step-functions
+
+provider:
+  name: aws
+  runtime: python3.8
+  stage: ${opt:stage, 'dev'}
+  region: ap-northeast-1
+  memorySize: 128
+  timeout: 900
+
+custom:
+  defaultStage: dev
+  basePath: ramen
+
+functions:
+  async-api:
+    handler: app.lambda_handler
+    name: async-api-${self:provider.stage}
+    environment:
+      TIMER: 30
+
+stepFunctions:
+  stateMachines:
+    state-machine:
+      name: state-machine-${self:provider.stage}
+      events:
+        - http:
+            path: ${self:custom.basePath}/start-execution
+            method: post
+            action: StartExecution
+            iamRole:
+              Fn::GetAtt: [AsyncApiRole, Arn]
+            request:
+              template:
+                application/json: |-
+                  {
+                    "stateMachineArn":"arn:aws:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:state-machine-${self:provider.stage}"
+                  }
+        - http:
+            path: ${self:custom.basePath}/describe-execution
+            method: post
+            action: DescribeExecution
+            iamRole:
+              Fn::GetAtt: [AsyncApiRole, Arn]
+            response:
+              template:
+                application/json: |-
+                  {
+                    "input": $util.parseJson($input.json('$.input')),
+                    #if($input.path('$.output') != "")
+                      "output": $util.parseJson($input.json('$.output')),
+                    #end
+                    "status": $input.json('$.status')
+                  }
+      definition:
+        StartAt: async-api-task
+        States:
+          async-api-task:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [async-api, Arn]
+            End: true
+
+resources:
+  Resources:
+    AsyncApiRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: async-api-role-${self:provider.stage}
+        Path: /service-role/
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess
