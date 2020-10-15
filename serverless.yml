@@ -2,6 +2,7 @@ service: async-api
 
 plugins:
   - serverless-step-functions
+  - serverless-pseudo-parameters
 
 provider:
   name: aws
@@ -36,6 +37,7 @@ stepFunctions:
               template:
                 application/json: |-
                   {
+                    "input": "$util.escapeJavaScript($input.json('$'))",
                     "stateMachineArn":"arn:aws:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:state-machine-${self:provider.stage}"
                   }
         - http:
